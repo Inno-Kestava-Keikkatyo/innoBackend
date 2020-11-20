@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken")
 const authenticateToken = require("../utils/auhenticateToken")
 
 const User = require("../models/User")
+const Agency = require("../models/Agency")
 
 /**
  * User registration.
@@ -100,6 +101,31 @@ usersRouter.put("/", authenticateToken, async (request, response, next) => {
     }
     return response.status(200).json(updatedUser)
 
+  } catch (exception) {
+    return next(exception)
+  }
+})
+
+/**
+ * Retrieves all workers that have a matching name pattern.
+ * @example
+ * http://localhost:3001/api/users?name=jarmo
+ */
+usersRouter.get("/", authenticateToken, async (request, response, next) => {
+  const decoded = response.locals.decoded
+  const name = request.query.name
+
+  try {
+    const agency = await Agency.findById(decoded.id)
+    if (agency && name) {
+      // Työntekijät haetaan SQL:n LIKE operaattorin tapaisesti
+      // Työpassit jätetään hausta pois
+      const users = await User.find({ name: { $regex: name, $options: "i" } }, { licenses: 0 })
+      if (users) {
+        return response.status(200).json(users)
+      }
+    }
+    return response.status(400).json({ error: "Users not found" })
   } catch (exception) {
     return next(exception)
   }
