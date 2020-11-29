@@ -1,6 +1,7 @@
 const businessesRouter = require("express").Router()
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
+const Agency = require("../models/Agency")
 const Business = require("../models/Business")
 const authenticateToken = require("../utils/auhenticateToken")
 const utils = require("../utils/common")
@@ -201,6 +202,26 @@ businessesRouter.post("/:businessId/workers", authenticateToken, businessInParam
 
   } catch (exception) {
     next(exception)
+  }
+})
+
+businessesRouter.get("/", authenticateToken, async (request, response, next) => {
+  const decoded = response.locals.decoded
+  const name = request.query.name
+
+  try {
+    const agency = await Agency.findById(decoded.id)
+    if (agency && name) {
+      // Työntekijät haetaan SQL:n LIKE operaattorin tapaisesti
+      // Työpassit jätetään hausta pois
+      const users = await Business.find({ name: { $regex: name, $options: "i" } }, { licenses: 0 })
+      if (users) {
+        return response.status(200).json(users)
+      }
+    }
+    return response.status(400).json({ error: "Users not found" })
+  } catch (exception) {
+    return next(exception)
   }
 })
 
