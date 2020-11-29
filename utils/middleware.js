@@ -75,7 +75,7 @@ const agencyExists = (request, response, next) => {
  * Checks if an Business with url param :businessId exists.
  * Returned Business object from database is put to request.business
 */
-const businessExists = (request, response, next) => {
+const businessInParamExists = (request, response, next) => {
   try {
     if (request.params.businessId) {
       return Business.findById({ _id: request.params.businessId }, (error, result) => {
@@ -152,7 +152,7 @@ module.exports = {
   unknownEndpoint,
   errorHandler,
   bodyBusinessExists,
-  businessExists,
+  businessInParamExists,
   agencyExists,
   businessContractExists,
   needsToBeAgency,

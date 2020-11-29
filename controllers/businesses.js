@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken")
 const Business = require("../models/Business")
 const authenticateToken = require("../utils/auhenticateToken")
 const utils = require("../utils/common")
-const { businessExists, needsToBeAgency } = require("../utils/middleware")
+const { businessInParamExists, needsToBeAgency } = require("../utils/middleware")
 
 const domainUrl = "http://localhost:3000/"
 const businessApiPath = "api/businesses/"
@@ -121,7 +121,7 @@ businessesRouter.put("/", authenticateToken, async (request, response, next) => 
  * Workers are given as a json array of IDs: {"workers": ["id1","id2","id3"...]}
  * A single worker can also be given as json: {"worker":"id"}
  */
-businessesRouter.post("/:businessId/workers", authenticateToken, businessExists, needsToBeAgency, (request, response, next) => {
+businessesRouter.post("/:businessId/workers", authenticateToken, businessInParamExists, needsToBeAgency, (request, response, next) => {
 
   // Middleware businessExists() has populated request.business with the Business with businessId.
   const businessId = request.business._id
