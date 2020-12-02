@@ -277,6 +277,31 @@ agenciesRouter.post("/businesscontracts", authenticateToken, bodyBusinessExists,
   }
 })
 
+/**
+ * Route for getting a list of BusinessContracts that the logged in Agency has.
+ * body: No requirements
+ * Successful response.body: { success: true, businesscontracts: [businessContractId1, businessContractId2...] }
+ */
+agenciesRouter.get("/businesscontracts", authenticateToken, needsToBeAgency, async (request, response, next) => {
+  try {
+    if (request.agency.businessContracts) {
+      response
+        .status(200)
+        .json({ success: true, businesscontracts: request.agency.businessContracts })
+    }
+  } catch (exception) {
+    logger.error(exception.message)
+    next(exception)
+  }
+})
+
+
+/**
+ * Helper function to avoid duplicate code
+ * @param {String} agencyId
+ * @param {String} businessId
+ * @param {*} response
+ */
 const createBusinessContract = (agencyId, businessId, response) => {
   const businessContract = new BusinessContract({
     contractMade: false,

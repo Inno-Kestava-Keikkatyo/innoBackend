@@ -57,43 +57,47 @@ const whichWorkersExist = (workerIdArray, next, callback) => {
 /**
  * If a WorkContract fails to save, this method will remove the id references which may have been updated to Worker, Business, Agency
  */
-const deleteTracesOfFailedWorkContract = async (workerId, businessId, agencyId, workContractId) => {
-  const options = { $pop: { workContracts: [workContractId] } }
-  let errorHappened = false
-  await User.findByIdAndUpdate(workerId, options )
-    .then((result, error) => {
-      if (error) {
-        logger.error("Could not remove WorkContract ID " + workContractId + " from Worker ID " + workerId + " because of  ERROR: " + error)
-        errorHappened = true
-      } else if (!result) {
-        logger.info("Could not remove WorkContract ID " + workContractId + " from Worker ID " + workerId + ". Could not find Worker.")
-      }
-    })
+const deleteTracesOfFailedWorkContract = async (workerId, businessId, agencyId, workContractId, next) => {
+  try {
+    const options = { $pull: { workContracts: ["workContractId"] } }
+    let errorHappened = false
+    await User.findByIdAndUpdate(workerId, options )
+      .then((result, error) => {
+        if (error) {
+          logger.error("Could not remove WorkContract ID " + workContractId + " from Worker ID " + workerId + " because of  ERROR: " + error)
+          errorHappened = true
+        } else if (!result) {
+          logger.info("Could not remove WorkContract ID " + workContractId + " from Worker ID " + workerId + ". Could not find Worker.")
+        }
+      })
 
-  await Agency.findByIdAndUpdate(agencyId, options )
-    .then((result, error) => {
-      if (error) {
-        logger.error("Could not remove WorkContract ID " + workContractId + " from Agency ID " + agencyId + " because of  ERROR: " + error)
-        errorHappened = true
-      } else if (!result) {
-        logger.info("Could not remove WorkContract ID " + workContractId + " from Agency ID " + agencyId + ". Could not find Agency.")
-      }
-    })
+    await Agency.findByIdAndUpdate(agencyId, options )
+      .then((result, error) => {
+        if (error) {
+          logger.error("Could not remove WorkContract ID " + workContractId + " from Agency ID " + agencyId + " because of  ERROR: " + error)
+          errorHappened = true
+        } else if (!result) {
+          logger.info("Could not remove WorkContract ID " + workContractId + " from Agency ID " + agencyId + ". Could not find Agency.")
+        }
+      })
 
-  await Business.findByIdAndUpdate(businessId, options )
-    .then((result, error) => {
-      if (error) {
-        logger.error("Could not remove WorkContract ID " + workContractId + " from Business ID " + businessId + " because of  ERROR: " + error)
-        errorHappened = true
-      } else if (!result) {
-        logger.info("Could not remove WorkContract ID " + workContractId + " from Business ID " + businessId + ". Could not find Business.")
-      }
-    })
+    await Business.findByIdAndUpdate(businessId, options )
+      .then((result, error) => {
+        if (error) {
+          logger.error("Could not remove WorkContract ID " + workContractId + " from Business ID " + businessId + " because of  ERROR: " + error)
+          errorHappened = true
+        } else if (!result) {
+          logger.info("Could not remove WorkContract ID " + workContractId + " from Business ID " + businessId + ". Could not find Business.")
+        }
+      })
 
-  if (errorHappened) {
-    return false
-  } else {
-    return true
+    if (errorHappened) {
+      return false
+    } else {
+      return true
+    }
+  } catch (error) {
+    next(error)
   }
 }
 
