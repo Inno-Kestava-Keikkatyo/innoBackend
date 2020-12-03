@@ -37,6 +37,7 @@ workcontractsRouter.post("/", authenticateToken, needsToBeAgency, bodyBusinessEx
   try {
     // TODO: Validate body objects for malicious code, and the validate the validityPeriod date object and processStatus for correctness
     const businessId = request.body.businessId
+    console.log("businessId" + businessId)
     const workerId = request.body.workerId
     const validityPeriod = new Date(request.body.validityPeriod)
     const processStatus = request.body.processStatus
@@ -47,13 +48,16 @@ workcontractsRouter.post("/", authenticateToken, needsToBeAgency, bodyBusinessEx
     if (!request.agency.businessContracts || request.agency.businessContracts.length <= 0) {
       response.status(400).send({ message: "The logged in Agency has no BusinessContracts." })
     }
-
+    // request.agency.businessContracts
+    const arr = ["jeejee", "joojoo", "5fa88f86e4763b5ed8ea105e"]
     // Go through the contracts from this agency and check if the required :businessId can be found from any of them
     if (request.agency.businessContracts || request.agency.businessContracts.length > 0) {
-      let commonContractId = request.agency.businessContracts.some((contract) => {
-        return contract.business === businessId
+      let commonContractId = arr.some((contract) => {
+        console.log(contract.toString())
+        return contract.toString() === businessId.toString()
       })
 
+      console.log("commoncontractid: " + commonContractId)
       if (!commonContractId || commonContractId === null) {
         response.status(400).send({ message: "The logged in Agency has no BusinessContracts with Business with ID " + businessId })
       }
@@ -138,29 +142,36 @@ workcontractsRouter.post("/", authenticateToken, needsToBeAgency, bodyBusinessEx
       .then((result, error) => {
         if (!result || error) { // Saving the new contract was unsuccessful, clean up
           deleteTracesOfFailedWorkContract(workerId, businessId, agencyId, contractToCreate._id, next)
-            .then((result) => {
+            .then((deleteResult, deleteError) => {
               // Deleting the id of the new WorkContract from agency, business, worker was successful
-              if (result) {
+              if (deleteResult) {
                 logger.error("Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created.")
                 response
                   .status(500)
                   .send(error || { message: "Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created." })
-              } else if (error) {
+              } else if (deleteError) {
                 // Deleting the id references for the nonexisting WorkContract was not successful, log the result.
                 logger.error("Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created, but references to the nonexisting workContract could not be removed. \n"
                 + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + ".")
                 response
                   .status(500)
-                  .send(error || { message: "Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created, but references to the nonexisting workContract could not be removed. \n"
+                  .send(deleteError || { message: "Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created, but references to the nonexisting workContract could not be removed. \n"
                   + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + "." })
               }
             })
         }
-      })
+      }) // Nothing went wrong, send success response
+      .then((result, error) => {
+        if (result || !error) {
+          logger.info("result: " + result)
+          return response
+            .status(201)
+            .json({ created: domainUrl + workContractsApiPath + result._id })
 
-    return response
-      .status(201)
-      .json({ created: domainUrl + workContractsApiPath + contract._id })
+        } else {
+          logger.error("Unable to create WorkContract.")
+        }
+      })
   } catch (exception) {
     next(exception)
   }
