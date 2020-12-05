@@ -2,6 +2,7 @@ const logger = require("./logger")
 const Business = require("../models/Business")
 const Agency = require("../models/Agency")
 const BusinessContract = require("../models/BusinessContract")
+const User = require("../models/User")
 
 const requestLogger = (request, response, next) => {
   logger.info("Method:", request.method)
@@ -41,7 +42,7 @@ const bodyBusinessExists = (request, response, next) => {
         }
       })
     } else {
-      response.status(400).send({ error: "No businessId in request body." })
+      return response.status(400).send({ error: "No businessId in request body." })
     }
   } catch (exception) {
     next(exception)
@@ -96,20 +97,21 @@ const businessInParamExists = (request, response, next) => {
 
 /**
  * Checks if a BusinessContract with url param :businessContractId exists.
+ * If found, contract is put to request.businessContract.
 */
 const businessContractExists = (request, response, next) => {
   try {
     if (request.params.businessContractId) {
-      return BusinessContract.findById({ _id: request.params.businessContractId }, (error, result) => {
+      BusinessContract.findById({ _id: request.params.businessContractId }, (error, result) => {
         if (error || !result) {
-          response.status(404).send({ error: "No BusinessContract found with the request :businessContractId." })
+          response.status(404).send({ message: "No BusinessContract found with the request :businessContractId." })
         } else {
           request.businessContract = result
           return next()
         }
       })
     } else {
-      response.status(400).send({ error: "No :businessContractId in url." })
+      response.status(400).send({ message: "No :businessContractId in url." })
     }
   } catch (exception) {
     next(exception)
@@ -138,9 +140,24 @@ const needsToBeAgency = (request, response, next) => {
 const needsToBeBusiness = (request, response, next) => {
   Business.findById({ _id: response.locals.decoded.id }, (error, result) => {
     if (error || !result) {
-      response.status(401).send(error || { message: "This route only available to Business users. The logged in user with ID " + request.locals.decoded.id + " is not one." })
+      response.status(401).send(error || { message: "This route only available to Business users. The logged in user with ID " + response.locals.decoded.id + " is not one." })
     } else {
       request.business = result
+      return next()
+    }
+  })
+}
+
+/**
+ * Checks if the logged in user is a Worker.
+ * Business object from database is populated to request.worker
+*/
+const needsToBeWorker = (request, response, next) => {
+  User.findById({ _id: response.locals.decoded.id }, (error, result) => {
+    if (error || !result) {
+      response.status(401).send(error || { message: "This route only available to Worker users. The logged in user with ID " + response.locals.decoded.id + " is not one." })
+    } else {
+      request.worker = result
       return next()
     }
   })
@@ -156,5 +173,6 @@ module.exports = {
   agencyExists,
   businessContractExists,
   needsToBeAgency,
-  needsToBeBusiness
+  needsToBeBusiness,
+  needsToBeWorker
 }

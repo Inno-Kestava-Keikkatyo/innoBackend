@@ -5,13 +5,12 @@ const jwt = require("jsonwebtoken")
 const authenticateToken = require("../utils/auhenticateToken")
 const utils = require("../utils/common")
 const Agency = require("../models/Agency")
-const { bodyBusinessExists, needsToBeAgency } = require("../utils/middleware")
-const BusinessContract = require("../models/BusinessContract")
+const { needsToBeAgency } = require("../utils/middleware")
 const Promise = require("bluebird")
 const User = require("../models/User")
 const domainUrl = "http://localhost:3000/"
 const agencyApiPath = "api/agencies/"
-const businessContractsPath = "businesscontracts/"
+
 const workersPath = "workers/"
 
 /**
@@ -230,64 +229,16 @@ agenciesRouter.post("/workers", authenticateToken, needsToBeAgency, (request, re
 })
 
 /**
- * Route for initiating a connection between Agency and Business.
- * The BusinessContract is created and the url to the contract resource is returned so that it can be sent to the Business.
- * body: {businessId: "businessId"}
- * agencyId from jwt-token
- * Successful response.body: {success: true}
- * response.header.Location: created businesscontract url api/agencies/businesscontracts/:businessContractId
- */
-agenciesRouter.post("/businesscontracts", authenticateToken, bodyBusinessExists, needsToBeAgency, (request, response, next) => {
-  try {
-    const agencyId = request.agency._id
-    const businessId = request.body.businessId
-    // Check if businessContract between this Agency and the Business already exists
-    if (request.agency.businessContracts) {
-      let commonContractId = null
-      // Using Promise.map:
-      Promise.map(request.agency.businessContracts, (contract) => {
-        // Promise.map awaits for returned promises as well.
-        return BusinessContract.findById({ _id: contract._id }, (error, result) => {
-          if (!result || error) {
-            response.status(500).send(error || { message: "Agency with ID " + agencyId + " has a BusinessContract with ID " + contract._id + " but it does not exist!" })
-          }
-
-          let contractBusinessId = result.business.toString()
-          if (contractBusinessId === businessId) {
-            commonContractId = contract._id
-          }
-        })
-      }).then( () => {
-        // If there was no BusinessContract between this Agency and the Business, create a new one
-        if (commonContractId === null) {
-          createBusinessContract(agencyId, businessId, response)
-        } else {
-          return response.status(400)
-            .json({ message: "Agency (ID " + agencyId + ") already has a BusinessContract with Business (ID " + businessId + ").",
-              existingContract: domainUrl + agencyApiPath + businessContractsPath + commonContractId })
-        }
-
-      })
-    } else { // Agency had no BusinessContracts yet
-      createBusinessContract(agencyId, businessId, response)
-    }
-  } catch (exception) {
-    console.log(exception.message)
-    next(exception)
-  }
-})
-
-/**
  * Route for getting a list of BusinessContracts that the logged in Agency has.
  * body: No requirements
- * Successful response.body: { success: true, businesscontracts: [businessContractId1, businessContractId2...] }
+ * Successful response.body: { businesscontracts: [businessContractId1, businessContractId2...] }
  */
 agenciesRouter.get("/businesscontracts", authenticateToken, needsToBeAgency, async (request, response, next) => {
   try {
     if (request.agency.businessContracts) {
       response
         .status(200)
-        .json({ success: true, businesscontracts: request.agency.businessContracts })
+        .json(request.agency.businessContracts)
     }
   } catch (exception) {
     logger.error(exception.message)
@@ -295,44 +246,30 @@ agenciesRouter.get("/businesscontracts", authenticateToken, needsToBeAgency, asy
   }
 })
 
-
 /**
- * Helper function to avoid duplicate code
- * @param {String} agencyId
- * @param {String} businessId
- * @param {*} response
+ * Pop the last added businessContract from Agency
  */
-const createBusinessContract = (agencyId, businessId, response) => {
-  const businessContract = new BusinessContract({
-    contractMade: false,
-    business: businessId
-  })
-
-  businessContract.save((error, result) => {
-    if (error || !result) {
-      return response
-        .status(500)
-        .json({ error: "Could not save BusinessContract instance to database. Possible error message: " + error })
+agenciesRouter.put("/businesscontracts", authenticateToken, needsToBeAgency, async (request, response, next) => {
+  try {
+    if (request.agency.businessContracts) {
+      request.agency.businessContracts.pop()
+      request.agency.save((error, result) => {
+        if (error || !result) {
+          return response
+            .status(500)
+            .json({ message: "Unable to save Agency object." })
+        } else {
+          return response
+            .status(200)
+            .json({ message: "Last businessContract popped." })
+        }
+      })
     }
 
-    logger.info("BusinessContract created with ID " + businessContract._id)
-
-    // $addToSet adds to mongoose array if the item does not already exist, thus eliminating duplicates.
-    Agency.findOneAndUpdate({ _id: agencyId }, { $addToSet: { businessContracts: [result._id] } }, (error2, result2) => {
-      if (error2 || !result2) {
-        return response
-          .status(500)
-          .json({ error: "Could not add created BusinessContract to Agency. Possible error message: " + error2 })
-      }
-
-      // Create-operation successful
-      // Return a response with the created BusinessContract resource uri
-      return response
-        .status(201)
-        .header({ Location: domainUrl + agencyApiPath + businessContractsPath + result._id })
-        .json({ success: true })
-    })
-  })
-}
+  } catch (exception) {
+    logger.error(exception.message)
+    next(exception)
+  }
+})
 
 module.exports = agenciesRouter

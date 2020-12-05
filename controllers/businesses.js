@@ -5,7 +5,7 @@ const Agency = require("../models/Agency")
 const Business = require("../models/Business")
 const authenticateToken = require("../utils/auhenticateToken")
 const utils = require("../utils/common")
-const { businessInParamExists, needsToBeAgency } = require("../utils/middleware")
+const { businessInParamExists, needsToBeAgency, needsToBeBusiness } = require("../utils/middleware")
 
 const domainUrl = "http://localhost:3000/"
 const businessApiPath = "api/businesses/"
@@ -185,7 +185,7 @@ businessesRouter.post("/:businessId/workers", authenticateToken, businessInParam
               console.log("Could not add worker array to Business. Error: " + error)
               return response
                 .status(400)
-                .json({ error: "Could not add all Workers to Business, so added none." })
+                .json({ message: "Could not add all Workers to Business, so added none." })
             }
             // There were some ok worker ids to add
             return response
@@ -195,7 +195,7 @@ businessesRouter.post("/:businessId/workers", authenticateToken, businessInParam
         } else {
           return response
             .status(404)
-            .json({ error: "All of the sent Worker Ids were either erronous or could not be matched with an existing worker." })
+            .json({ message: "All of the sent Worker Ids were either erronous or could not be matched with an existing worker." })
         }
       } )
     }
@@ -220,6 +220,16 @@ businessesRouter.get("/", authenticateToken, async (request, response, next) => 
       }
     }
     return response.status(400).json({ error: "Users not found" })
+  } catch (exception) {
+    return next(exception)
+  }
+})
+
+businessesRouter.get("/businesscontracts", authenticateToken, needsToBeBusiness, async (request, response, next) => {
+  try {
+    response
+      .status(200)
+      .json(request.business.businessContracts)
   } catch (exception) {
     return next(exception)
   }

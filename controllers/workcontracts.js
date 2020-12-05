@@ -51,16 +51,21 @@ workcontractsRouter.post("/", authenticateToken, needsToBeAgency, bodyBusinessEx
     // request.agency.businessContracts
     const arr = ["jeejee", "joojoo", "5fa88f86e4763b5ed8ea105e"]
     // Go through the contracts from this agency and check if the required :businessId can be found from any of them
+    let commonContractIndex = -1
     if (request.agency.businessContracts || request.agency.businessContracts.length > 0) {
-      let commonContractId = arr.some((contract) => {
-        console.log(contract.toString())
+      
+      
+        commonContractIndex = request.agency.businessContracts.findIndex((contract) => {
         return contract.toString() === businessId.toString()
       })
-
-      console.log("commoncontractid: " + commonContractId)
-      if (!commonContractId || commonContractId === null) {
-        response.status(400).send({ message: "The logged in Agency has no BusinessContracts with Business with ID " + businessId })
-      }
+    }
+    // If a common contract is found,
+    let commonContractId = null
+    console.log("commoncontractindex: " + commonContractIndex)
+    if (commonContractIndex === -1) {
+      response.status(400).send({ message: "The logged in Agency has no BusinessContracts with Business with ID " + businessId })
+    } else {
+      commonContractId = arr[commonContractIndex]
     }
 
     if (!workerExists(body.workerId)) {
@@ -80,98 +85,89 @@ workcontractsRouter.post("/", authenticateToken, needsToBeAgency, bodyBusinessEx
     const contractToCreate = new WorkContract(createFields)
 
     // Add the contract id to the business, agency and worker
-    await Business.findOneAndUpdate({ _id: businessId }, { $addToSet: { workcontracts: contractToCreate._id } })
-      .then((result, error) => {
-        if (!result || error) {
-          // Adding the WorkContract to Business failed, no contract saved
+    await Business.findOneAndUpdate({ _id: businessId }, { $addToSet: { workcontracts: contractToCreate._id } }, (error, result) => {
+      if (!result || error) {
+        // Adding the WorkContract to Business failed, no contract saved
+        response
+          .status(500)
+          .send(error || { message: "Could not add WorkContract to Business  with ID" + businessId + ". No WorkContract created." })
+      }
+    })
+
+    let errorInDelete = null
+
+    await Agency.findOneAndUpdate({ _id: agencyId }, { $addToSet: { workcontracts: contractToCreate._id } }, (error, result) => {
+      if (!result || error) {
+        console.log("Adding the WorkContract to Agency failed, no contract saved. Running deleteTracesOfFailedWorkContract()")
+        // Adding the WorkContract to Agency failed, no contract saved
+        errorInDelete = deleteTracesOfFailedWorkContract(workerId, businessId, agencyId, contractToCreate._id, next)
+
+        // Deleting the id of the new WorkContract from agency, business, worker was successful
+        if (!errorInDelete) {
+          logger.error("Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created.")
           response
             .status(500)
-            .send(error || { message: "Could not add WorkContract to Business  with ID" + businessId + ". No WorkContract created." })
+            .send(error || { message: "Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created." })
+        } else if (errorInDelete) {
+          // Deleting the id references for the nonexisting WorkContract was not successful, log the result.
+          logger.error("Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created, but references to the nonexisting workContract ID " + contractToCreate._id+" could not be removed. \n"
+            + "Check Agency with ID " + agencyId + " and Business with ID " + businessId + ".")
+          response
+            .status(500)
+            .send(error || { message: "Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created." })
         }
-      })
+      }
+    })
 
-    await Agency.findOneAndUpdate({ _id: agencyId }, { $addToSet: { workcontracts: contractToCreate._id } })
-      .then((result, error) => {
-        if (!result || error) {
-          // Adding the WorkContract to Agency failed, no contract saved
-          deleteTracesOfFailedWorkContract(workerId, businessId, agencyId, contractToCreate._id, next)
-            .then((result) => {
-              // Deleting the id of the new WorkContract from agency, business, worker was successful
-              if (result) {
-                logger.error("Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created.")
-                response
-                  .status(500)
-                  .send(error || { message: "Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created." })
-              } else if (error) {
-                // Deleting the id references for the nonexisting WorkContract was not successful, log the result.
-                logger.error("Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created, but references to the nonexisting workContract ID " + contractToCreate._id+" could not be removed. \n"
-                + "Check Agency with ID " + agencyId + " and Business with ID " + businessId + ".")
-                response
-                  .status(500)
-                  .send(error || { message: "Could not add WorkContract to Agency  with ID" + agencyId + ". No WorkContract created." })
-              }
-            })
-        }})
-
-    await User.findOneAndUpdate({ _id: workerId }, { $addToSet: { workcontracts: contractToCreate._id } })
-      .then((result, error) => {
-        if (!result || error) {
+    errorInDelete = null
+    await User.findOneAndUpdate({ _id: workerId }, { $addToSet: { workcontracts: contractToCreate._id } }, (error, result) => {
+      if (!result || error) {
         // Adding the WorkContract to Worker failed, no contract saved
-          deleteTracesOfFailedWorkContract(workerId, businessId, agencyId, contractToCreate._id, next)
-            .then((result) => {
-              // Deleting the id of the new WorkContract from agency, business, worker was successful
-              if (result) {
-                logger.error("Could not add WorkContract to Worker  with ID" + workerId + ". No WorkContract created.")
-                response
-                  .status(500)
-                  .send(error || { message: "Could not add WorkContract to Worker  with ID" + workerId + ". No WorkContract created." })
-              } else if (error) {
-                // Deleting the id references for the nonexisting WorkContract was not successful, log the result.
-                logger.error("Could not add WorkContract to Worker  with ID" + workerId + ". No WorkContract created, but references to the nonexisting workContract ID " + contractToCreate._id+" could not be removed. \n"
-                + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + ".")
-                response
-                  .status(500)
-                  .send(error || { message: "Could not add WorkContract to Worker  with ID" + agencyId + ". No WorkContract created, but references to the nonexisting workContract ID " + contractToCreate._id+" could not be removed. \n"
-                  + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + "." })
-              }
-            })
-        }})
+        errorInDelete = deleteTracesOfFailedWorkContract(workerId, businessId, agencyId, contractToCreate._id, next)
+
+        if (!errorInDelete) {   // Deleting the id of the new WorkContract from agency, business, worker was successful
+          logger.error("Could not add WorkContract to Worker  with ID" + workerId + ". No WorkContract created.")
+          response
+            .status(500)
+            .send(error || { message: "Could not add WorkContract to Worker  with ID" + workerId + ". No WorkContract created." })
+        } else if (errorInDelete) {
+          // Deleting the id references for the nonexisting WorkContract was not successful, log the result.
+          logger.error("Could not add WorkContract to Worker  with ID" + workerId + ". No WorkContract created, but references to the nonexisting workContract ID " + contractToCreate._id+" could not be removed. \n"
+            + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + ".")
+          response
+            .status(500)
+            .send(error || { message: "Could not add WorkContract to Worker  with ID" + agencyId + ". No WorkContract created, but references to the nonexisting workContract ID " + contractToCreate._id+" could not be removed. \n"
+                + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + "." })
+        }
+      }
+    })
 
     // Updating Agency, Business, Worker successful
     const contract = await contractToCreate.save()
-      .then((result, error) => {
-        if (!result || error) { // Saving the new contract was unsuccessful, clean up
-          deleteTracesOfFailedWorkContract(workerId, businessId, agencyId, contractToCreate._id, next)
-            .then((deleteResult, deleteError) => {
-              // Deleting the id of the new WorkContract from agency, business, worker was successful
-              if (deleteResult) {
-                logger.error("Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created.")
-                response
-                  .status(500)
-                  .send(error || { message: "Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created." })
-              } else if (deleteError) {
-                // Deleting the id references for the nonexisting WorkContract was not successful, log the result.
-                logger.error("Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created, but references to the nonexisting workContract could not be removed. \n"
-                + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + ".")
-                response
-                  .status(500)
-                  .send(deleteError || { message: "Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created, but references to the nonexisting workContract could not be removed. \n"
-                  + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + "." })
-              }
-            })
-        }
-      }) // Nothing went wrong, send success response
-      .then((result, error) => {
-        if (result || !error) {
-          logger.info("result: " + result)
-          return response
-            .status(201)
-            .json({ created: domainUrl + workContractsApiPath + result._id })
+    console.log(contract.toString)
+    if (!contract) {
+      errorInDelete = deleteTracesOfFailedWorkContract(workerId, businessId, agencyId, contractToCreate._id, next)
+      // Deleting the id of the new WorkContract from agency, business, worker was successful
+      if (!errorInDelete) {
+        logger.error("Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created.")
+        response
+          .status(500)
+          .send( { message: "Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created." })
+      } else if (errorInDelete) {
+        // Deleting the id references for the nonexisting WorkContract was not successful, log the result.
+        logger.error("Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created, but references to the nonexisting workContract could not be removed. \n"
+            + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + ".")
+        response
+          .status(500)
+          .send( { message: "Could not save WorkContract with ID" + contractToCreate._id + ". No WorkContract created, but references to the nonexisting workContract could not be removed. \n"
+                + "Check  with ID " + agencyId + " and Business with ID " + businessId + " and Worker with ID " + workerId + "." })
+      }
+    } else {
+      return response
+        .status(201)
+        .json({ created: domainUrl + workContractsApiPath + contract._id })
 
-        } else {
-          logger.error("Unable to create WorkContract.")
-        }
-      })
+    }
   } catch (exception) {
     next(exception)
   }

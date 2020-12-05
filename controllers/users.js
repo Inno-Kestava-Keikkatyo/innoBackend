@@ -5,6 +5,7 @@ const authenticateToken = require("../utils/auhenticateToken")
 
 const User = require("../models/User")
 const Agency = require("../models/Agency")
+const { needsToBeWorker } = require("../utils/middleware")
 
 /**
  * User registration.
@@ -126,6 +127,16 @@ usersRouter.get("/", authenticateToken, async (request, response, next) => {
       }
     }
     return response.status(400).json({ error: "Users not found" })
+  } catch (exception) {
+    return next(exception)
+  }
+})
+
+usersRouter.get("/businesscontracts", authenticateToken, needsToBeWorker, async (request, response, next) => {
+  try {
+    response
+      .status(200)
+      .json(request.worker.businessContracts)
   } catch (exception) {
     return next(exception)
   }

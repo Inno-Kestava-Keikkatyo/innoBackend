@@ -43,7 +43,15 @@ const userSchema = mongoose.Schema({
   licenses: [{
     type: String,
     minlength: 3
-  }]
+  }],
+  businessContracts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "BusinessContract",
+  }],
+  workContracts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "WorkContract",
+  }],
 })
 
 userSchema.plugin(uniqueValidator)
