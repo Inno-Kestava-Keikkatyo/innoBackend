@@ -1,8 +1,10 @@
 const businessesRouter = require("express").Router()
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
+const logger = require("../utils/logger")
 const Agency = require("../models/Agency")
 const Business = require("../models/Business")
+const BusinessContract = require("../models/BusinessContract")
 const authenticateToken = require("../utils/auhenticateToken")
 const utils = require("../utils/common")
 const { businessInParamExists, needsToBeAgency, needsToBeBusiness } = require("../utils/middleware")
@@ -225,13 +227,41 @@ businessesRouter.get("/", authenticateToken, async (request, response, next) => 
   }
 })
 
+/**
+ * Route for getting full data of all BusinessContracts that the logged in Business has.
+ * body: No requirements
+ * Successful response.body: { [{businessContract1}, {businessContract2},...] }
+ */
 businessesRouter.get("/businesscontracts", authenticateToken, needsToBeBusiness, async (request, response, next) => {
+  const contractIds = request.business.businessContracts
+  logger.info("ContractIds of this Business: " + contractIds)
+  let contracts = []
+  let temp = null
   try {
-    response
-      .status(200)
-      .json(request.business.businessContracts)
+    if (contractIds) {
+      logger.info("Searching database for BusinessContracts: " + contractIds)
+      contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+        temp = await BusinessContract.findById(contractId).exec()
+        if (temp) {
+          contracts.push(temp)
+          temp = null
+        }
+
+        if (index === contractIds.length-1) { // If this was the last contract to find, send response
+          logger.info("BusinessContracts to Response: " + contracts)
+          return response
+            .status(200)
+            .json(contracts)
+        }
+      })
+    } else { // No contractIds in Agency, respond with empty array
+      return response
+        .status(200)
+        .json(contracts)
+    }
   } catch (exception) {
-    return next(exception)
+    logger.error(exception)
+    next(exception)
   }
 })
 

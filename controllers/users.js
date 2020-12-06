@@ -1,10 +1,12 @@
 const usersRouter = require("express").Router()
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
+const logger = require("../utils/logger")
 const authenticateToken = require("../utils/auhenticateToken")
 
 const User = require("../models/User")
 const Agency = require("../models/Agency")
+const BusinessContract = require("../models/BusinessContract")
 const { needsToBeWorker } = require("../utils/middleware")
 
 /**
@@ -132,13 +134,40 @@ usersRouter.get("/", authenticateToken, async (request, response, next) => {
   }
 })
 
+/**
+ * Route for getting full data of all BusinessContracts that the logged in Agency has.
+ * body: No requirements
+ * Successful response.body: { [{businessContract1}, {businessContract2},...] }
+ */
 usersRouter.get("/businesscontracts", authenticateToken, needsToBeWorker, async (request, response, next) => {
+  const contractIds = request.worker.businessContracts
+  let contracts = []
+  let temp = null
   try {
-    response
-      .status(200)
-      .json(request.worker.businessContracts)
+    if (contractIds) {
+      logger.info("Searching database for BusinessContracts: " + contractIds)
+      contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+        temp = await BusinessContract.findById(contractId).exec()
+        if (temp) {
+          contracts.push(temp)
+          temp = null
+        }
+
+        if (index === contractIds.length-1) { // If this was the last contract to find, send response
+          logger.info("BusinessContracts to Response: " + contracts)
+          return response
+            .status(200)
+            .json(contracts)
+        }
+      })
+    } else { // No contractIds in Agency, respond with empty array
+      return response
+        .status(200)
+        .json(contracts)
+    }
   } catch (exception) {
-    return next(exception)
+    logger.error(exception)
+    next(exception)
   }
 })
 

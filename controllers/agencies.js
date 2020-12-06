@@ -8,6 +8,7 @@ const Agency = require("../models/Agency")
 const { needsToBeAgency } = require("../utils/middleware")
 const Promise = require("bluebird")
 const User = require("../models/User")
+const BusinessContract = require("../models/BusinessContract")
 const domainUrl = "http://localhost:3000/"
 const agencyApiPath = "api/agencies/"
 
@@ -229,19 +230,87 @@ agenciesRouter.post("/workers", authenticateToken, needsToBeAgency, (request, re
 })
 
 /**
- * Route for getting a list of BusinessContracts that the logged in Agency has.
+ * Route for getting full data of all BusinessContracts that the logged in Agency has.
  * body: No requirements
- * Successful response.body: { businesscontracts: [businessContractId1, businessContractId2...] }
+ * Successful response.body: { [{businessContract1}, {businessContract2},...] }
  */
 agenciesRouter.get("/businesscontracts", authenticateToken, needsToBeAgency, async (request, response, next) => {
+  const contractIds = request.agency.businessContracts
+  let contracts = []
+  let temp = null
   try {
-    if (request.agency.businessContracts) {
-      response
+    if (contractIds) {
+      logger.info("Searching database for BusinessContracts: " + contractIds)
+      contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+        temp = await BusinessContract.findById(contractId).exec()
+        if (temp) {
+          contracts.push(temp)
+          temp = null
+        }
+
+        if (index === contractIds.length-1) { // If this was the last contract to find, send response
+          logger.info("BusinessContracts to Response: " + contracts)
+          return response
+            .status(200)
+            .json(contracts)
+        }
+      })
+    } else { // No contractIds in Agency, respond with empty array
+      return response
         .status(200)
-        .json(request.agency.businessContracts)
+        .json(contracts)
     }
   } catch (exception) {
-    logger.error(exception.message)
+    logger.error(exception)
+    next(exception)
+  }
+})
+
+/**
+ * TODO: foreach callback is synchronic so you cannot trust the order the array is actually handled. Fix with regular for loop
+ * A quality of life method which should maybe be removed later. Get all businesscontract info as an outsider, no validation yet. Should probably be updated to
+ * "return businesscontracts in this Agency, that I am involved in"
+ */
+agenciesRouter.get("/:agencyId/businesscontracts", authenticateToken, async (request, response, next) => {
+  try {
+    const agencyId = request.params.agencyId
+    logger.info("Finding BusinessContracts for Agency " + agencyId)
+    Agency.findById(request.params.agencyId, (error, agency) => {
+      if (error || !agency) {
+        return response
+          .status(404)
+          .json({ message: "Could not find Agency ID " + agencyId })
+      } else {
+        const contractIds = agency.businessContracts
+        let temp = null
+        let contracts = []
+        if (contractIds) {
+          logger.info("Searching database for BusinessContracts: " + contractIds)
+          contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+            temp = await BusinessContract.findById(contractId).exec()
+            logger.info("Current contract: " + temp)
+            if (temp) {
+              contracts.push(temp)
+              temp = null
+            }
+            logger.info("Index: " + index)
+            logger.info("contractIds.length" + contractIds.length)
+            if (index === contractIds.length-1) { // If this was the last contract to find, send response
+              logger.info("BusinessContracts to Response: " + contracts)
+              return response
+                .status(200)
+                .json(contracts)
+            }
+          })
+        } else { // No contractIds in Agency, respond with empty array
+          return response
+            .status(200)
+            .json(contracts)
+        }
+      }
+    })
+  } catch (exception) {
+    logger.error(exception)
     next(exception)
   }
 })

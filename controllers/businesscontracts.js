@@ -222,7 +222,7 @@ businesscontractsRouter.put("/:businessContractId", authenticateToken, businessC
               response
                 .header({ Location: businessContractsApiPath + request.businessContract._id })
                 .status(200)
-                .json({ businessContract: request.businessContract })
+                .json(request.businessContract)
             }
           })
       }
@@ -237,7 +237,7 @@ businesscontractsRouter.put("/:businessContractId", authenticateToken, businessC
             response
               .header({ Location: businessContractsApiPath + request.businessContract._id })
               .status(200)
-              .json({ businessContract: request.businessContract })
+              .json(request.businessContract)
           }
         })
     } else {
@@ -306,7 +306,7 @@ businesscontractsRouter.delete("/:businessContractId", authenticateToken, busine
 const createBusinessContract = (contractToCreate, response, callback) => {
 
   if (contractToCreate.business && contractToCreate.user) {
-    callback(new Error("Both businessId and workerId given to createBusinessContract(), can take only either one."))
+    callback(new Error("Both businessId and workerId given to createBusinessContract(), can take only either one."), null, response)
   }
 
   const businessContract = new BusinessContract({
