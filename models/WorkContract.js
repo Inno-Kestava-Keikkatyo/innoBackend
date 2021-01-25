@@ -15,6 +15,14 @@ const workContractSchema = mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "user",
   },
+  business: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "business",
+  },
+  processStatus: {
+    type: Number,
+    default: 1
+  }
 })
 
 

@@ -1,3 +1,14 @@
+/** Express router providing Agency-related routes
+ * @module controllers/agencies
+ * @requires express
+ */
+
+/**
+ * Express router to mount Agency-related functions on.
+ * @type {object}
+ * @const
+ * @namespace agenciesRouter
+*/
 const agenciesRouter = require("express").Router()
 const logger = require("../utils/logger")
 const bcrypt = require("bcryptjs")
@@ -5,20 +16,24 @@ const jwt = require("jsonwebtoken")
 const authenticateToken = require("../utils/auhenticateToken")
 const utils = require("../utils/common")
 const Agency = require("../models/Agency")
-const { bodyBusinessExists, needsToBeAgency } = require("../utils/middleware")
-const BusinessContract = require("../models/BusinessContract")
+const { needsToBeAgency } = require("../utils/middleware")
 const Promise = require("bluebird")
 const User = require("../models/User")
+const BusinessContract = require("../models/BusinessContract")
+
 const domainUrl = "http://localhost:3000/"
 const agencyApiPath = "api/agencies/"
-const businessContractsPath = "businesscontracts/"
+
 const workersPath = "workers/"
 
 /**
- * Agency registration.
  * Returns a token that is used for user log in.
  * Request requirements:
  * Body.email, Body.name, Body.password
+ * @name POST /agencies
+ * @function
+ * @memberof module:controllers/agencies~agenciesRouter
+ * @inner
  */
 agenciesRouter.post("/", async (request, response, next) => {
   try {
@@ -54,6 +69,12 @@ agenciesRouter.post("/", async (request, response, next) => {
   }
 })
 
+/**
+ * @name get/me
+ * @function
+ * @memberof module:controllers/agencies~agenciesRouter
+ * @inner
+ */
 agenciesRouter.get("/me", authenticateToken, (request, response, next) => {
   try {
     //Decodatun tokenin arvo haetaan middlewarelta
@@ -87,6 +108,7 @@ agenciesRouter.get("/workerIds", authenticateToken, needsToBeAgency, (request, r
 })
 
 /**
+ * @deprecated Workers are not listed under Agency/Business anymore: Workers are connected to Business/Agency through business/workcontracts
  * Return an array of full worker objects who belong to this Agency
  */
 agenciesRouter.get("/workers", authenticateToken, needsToBeAgency, (request, response, next) => {
@@ -158,6 +180,7 @@ agenciesRouter.put("/", authenticateToken, async (request, response, next) => {
 })
 
 /**
+ * @deprecated Workers are not listed under Agency/Business anymore: Workers are connected to Business/Agency through business/workcontracts
  * Route for adding workers to an Agency's list of workers
  * Example "http://www.domain.com/api/agencies/workers/" while logged in as an Agency
  * Request requirements: Body.workers / Body.worker
@@ -230,84 +253,120 @@ agenciesRouter.post("/workers", authenticateToken, needsToBeAgency, (request, re
 })
 
 /**
- * Route for initiating a connection between Agency and Business.
- * The BusinessContract is created and the url to the contract resource is returned so that it can be sent to the Business.
- * body: {businessId: "businessId"}
- * agencyId from jwt-token
- * Successful response.body: {success: true}
- * response.header.Location: created businesscontract url api/agencies/businesscontracts/:businessContractId
+ * Returns response.body: { [{businessContract1}, {businessContract2},...] }
+ * Requires user logged in as Agency.
+ * Route for getting full data of all BusinessContracts that the logged in Agency has.
+ * { [{businessContract1}, {businessContract2},...] }
+ * @name GET /agencies/businesscontracts
+ * @function
+ * @memberof module:controllers/agencies~agenciesRouter
+ * @inner
  */
-agenciesRouter.post("/businesscontracts", authenticateToken, bodyBusinessExists, needsToBeAgency, (request, response, next) => {
+agenciesRouter.get("/businesscontracts", authenticateToken, needsToBeAgency, async (request, response, next) => {
+  const contractIds = request.agency.businessContracts
+  let contracts = []
+  let temp = null
   try {
-    const agencyId = request.agency._id
-    const businessId = request.body.businessId
-    // Check if businessContract between this Agency and the Business already exists
-    if (request.agency.businessContracts) {
-      let commonContractId = null
-      // Using Promise.map:
-      Promise.map(request.agency.businessContracts, (contract) => {
-        // Promise.map awaits for returned promises as well.
-        return BusinessContract.findById({ _id: contract._id }, (error, result) => {
-          if (!result || error) {
-            response.status(500).send(error || { message: "Agency with ID " + agencyId + " has a BusinessContract with ID " + contract._id + " but it does not exist!" })
-          }
-
-          let contractBusinessId = result.business.toString()
-          if (contractBusinessId === businessId) {
-            commonContractId = contract._id
-          }
-        })
-      }).then( () => {
-        // If there was no BusinessContract between this Agency and the Business, create a new one
-        if (commonContractId === null) {
-          createBusinessContract(agencyId, businessId, response)
-        } else {
-          return response.status(400)
-            .json({ message: "Agency (ID " + agencyId + ") already has a BusinessContract with Business (ID " + businessId + ").",
-              existingContract: domainUrl + agencyApiPath + businessContractsPath + commonContractId })
+    if (contractIds) {
+      logger.info("Searching database for BusinessContracts: " + contractIds)
+      contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+        temp = await BusinessContract.findById(contractId).exec()
+        if (temp) {
+          contracts.push(temp)
+          temp = null
         }
 
+        if (index === contractIds.length-1) { // If this was the last contract to find, send response
+          logger.info("BusinessContracts to Response: " + contracts)
+          return response
+            .status(200)
+            .json(contracts)
+        }
       })
-    } else { // Agency had no BusinessContracts yet
-      createBusinessContract(agencyId, businessId, response)
+    } else { // No contractIds in Agency, respond with empty array
+      return response
+        .status(200)
+        .json(contracts)
     }
   } catch (exception) {
-    console.log(exception.message)
+    logger.error(exception)
     next(exception)
   }
 })
 
-const createBusinessContract = (agencyId, businessId, response) => {
-  const businessContract = new BusinessContract({
-    contractMade: false,
-    business: businessId
-  })
+/**
+ * TODO: foreach callback is synchronic so you cannot trust the order the array is actually handled. Fix with regular for loop
+ * A quality of life method which should maybe be removed later. Get all businesscontract info as an outsider, no validation yet. Should probably be updated to
+ * "return businesscontracts in this Agency, that I am involved in"
+ */
+agenciesRouter.get("/:agencyId/businesscontracts", authenticateToken, async (request, response, next) => {
+  try {
+    const agencyId = request.params.agencyId
+    logger.info("Finding BusinessContracts for Agency " + agencyId)
+    Agency.findById(request.params.agencyId, (error, agency) => {
+      if (error || !agency) {
+        return response
+          .status(404)
+          .json({ message: "Could not find Agency ID " + agencyId })
+      } else {
+        const contractIds = agency.businessContracts
+        let temp = null
+        let contracts = []
+        if (contractIds) {
+          logger.info("Searching database for BusinessContracts: " + contractIds)
+          contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+            temp = await BusinessContract.findById(contractId).exec()
+            logger.info("Current contract: " + temp)
+            if (temp) {
+              contracts.push(temp)
+              temp = null
+            }
+            logger.info("Index: " + index)
+            logger.info("contractIds.length" + contractIds.length)
+            if (index === contractIds.length-1) { // If this was the last contract to find, send response
+              logger.info("BusinessContracts to Response: " + contracts)
+              return response
+                .status(200)
+                .json(contracts)
+            }
+          })
+        } else { // No contractIds in Agency, respond with empty array
+          return response
+            .status(200)
+            .json(contracts)
+        }
+      }
+    })
+  } catch (exception) {
+    logger.error(exception)
+    next(exception)
+  }
+})
 
-  businessContract.save((error, result) => {
-    if (error || !result) {
-      return response
-        .status(500)
-        .json({ error: "Could not save BusinessContract instance to database. Possible error message: " + error })
+/**
+ * Pop the last added businessContract from Agency
+ */
+agenciesRouter.put("/businesscontracts", authenticateToken, needsToBeAgency, async (request, response, next) => {
+  try {
+    if (request.agency.businessContracts) {
+      request.agency.businessContracts.pop()
+      request.agency.save((error, result) => {
+        if (error || !result) {
+          return response
+            .status(500)
+            .json({ message: "Unable to save Agency object." })
+        } else {
+          return response
+            .status(200)
+            .json({ message: "Last businessContract popped." })
+        }
+      })
     }
 
-    logger.info("BusinessContract created with ID " + businessContract._id)
-
-    // $addToSet adds to mongoose array if the item does not already exist, thus eliminating duplicates.
-    Agency.findOneAndUpdate({ _id: agencyId }, { $addToSet: { businessContracts: [result._id] } }, (error2, result2) => {
-      if (error2 || !result2) {
-        return response
-          .status(500)
-          .json({ error: "Could not add created BusinessContract to Agency. Possible error message: " + error2 })
-      }
-
-      // Create-operation successful
-      // Return a response with the created BusinessContract resource uri
-      return response
-        .status(201)
-        .header({ Location: domainUrl + agencyApiPath + businessContractsPath + result._id })
-        .json({ success: true })
-    })
-  })
-}
+  } catch (exception) {
+    logger.error(exception.message)
+    next(exception)
+  }
+})
 
 module.exports = agenciesRouter

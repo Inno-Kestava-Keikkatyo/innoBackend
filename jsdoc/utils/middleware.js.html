@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: middleware.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: middleware.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/** Express router providing middleware functions
+ * @module utils/middleware
+ * @requires express
+ */
+
+const logger = require("./logger")
+const Business = require("../models/Business")
+const Agency = require("../models/Agency")
+const BusinessContract = require("../models/BusinessContract")
+const User = require("../models/User")
+
+/**
+ * Middleware to log every request. Does not log to a file at the moment.
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+ */
+const requestLogger = (request, response, next) => {
+  logger.info("Method:", request.method)
+  logger.info("Path:  ", request.path)
+  logger.info("Body:  ", request.body)
+  logger.info("---")
+  next()
+}
+
+/**
+ * Return a 404 error message when api gets a request to an unknown endpoint.
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+ */
+const unknownEndpoint = (request, response) => {
+  response.status(404).send({ error: "unknown endpoint" })
+}
+
+/**
+ * Return an error message if error thrown from an Express route.
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+ */
+const errorHandler = (error, request, response, next) => {
+  logger.error(error.message)
+
+  if (error.name === "CastError" &amp;&amp; error.kind === "ObjectId") {
+    return response.status(400).send({ error: "malformatted id" })
+  } else if (error.name === "ValidationError") {
+    return response.status(400).json({ error: error.message })
+  }
+
+  next(error)
+}
+
+/**
+ * Checks if a Business with request.body.businessId exists.
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+*/
+const bodyBusinessExists = (request, response, next) => {
+  try {
+    if (request.body.businessId) {
+      return Business.findById({ _id: request.body.businessId }, (error, result) => {
+        if (error || !result) {
+          response.status(404).send({ error: "No business found with the request businessId." })
+        } else {
+          return next()
+        }
+      })
+    } else {
+      return response.status(400).send({ error: "No businessId in request body." })
+    }
+  } catch (exception) {
+    next(exception)
+  }
+}
+
+/**
+ * Checks if an Agency with url param :agencyId exists.
+ * Returned Agency object from database is put to request.agency
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+*/
+const agencyExists = (request, response, next) => {
+  try {
+    if (request.params.agencyId) {
+      return Agency.findById({ _id: request.params.agencyId }, (error, result) => {
+        if (error || !result) {
+          response.status(404).send({ error: "No Agency found with the request :agencyId." })
+        } else {
+          request.agency = result
+          return next()
+        }
+      })
+    } else {
+      response.status(400).send({ error: "No :agencyId in url." })
+    }
+  } catch (exception) {
+    next(exception)
+  }
+}
+
+/**
+ * Checks if an Business with url param :businessId exists.
+ * Returned Business object from database is put to request.business
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+*/
+const businessInParamExists = (request, response, next) => {
+  try {
+    if (request.params.businessId) {
+      return Business.findById({ _id: request.params.businessId }, (error, result) => {
+        if (error || !result) {
+          response.status(404).send({ error: "No Business found with the request :businessId." })
+        } else {
+          request.business = result
+          return next()
+        }
+      })
+    } else {
+      response.status(400).send({ error: "No :businessId in url." })
+    }
+  } catch (exception) {
+    next(exception)
+  }
+}
+
+/**
+ * Checks if a BusinessContract with url param :businessContractId exists.
+ * If found, contract is put to request.businessContract.
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+*/
+const businessContractExists = (request, response, next) => {
+  try {
+    if (request.params.businessContractId) {
+      BusinessContract.findById({ _id: request.params.businessContractId }, (error, result) => {
+        if (error || !result) {
+          response.status(404).send({ message: "No BusinessContract found with the request :businessContractId." })
+        } else {
+          request.businessContract = result
+          return next()
+        }
+      })
+    } else {
+      response.status(400).send({ message: "No :businessContractId in url." })
+    }
+  } catch (exception) {
+    next(exception)
+  }
+}
+
+/**
+ * Checks if the logged in user is an Agency.
+ * Agency object from database is populated to request.agency
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+*/
+const needsToBeAgency = (request, response, next) => {
+  Agency.findById({ _id: response.locals.decoded.id }, (error, result) => {
+    if (error || !result) {
+      response.status(401).send(error || { message: "This route only available to Agency users. The logged in user with ID " + request.locals.decoded.id + " is not one." })
+    } else {
+      request.agency = result
+      return next()
+    }
+  })
+}
+
+/**
+ * Checks if the logged in user is a Business.
+ * Business object from database is populated to request.business
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+*/
+const needsToBeBusiness = (request, response, next) => {
+  Business.findById({ _id: response.locals.decoded.id }, (error, result) => {
+    if (error || !result) {
+      response.status(401).send(error || { message: "This route only available to Business users. The logged in user with ID " + response.locals.decoded.id + " is not one." })
+    } else {
+      request.business = result
+      return next()
+    }
+  })
+}
+
+/**
+ * Checks if the logged in user is a Worker.
+ * Business object from database is populated to request.worker
+ * @function
+ * @memberof module:utils/middleware
+ * @inner
+*/
+const needsToBeWorker = (request, response, next) => {
+  User.findById({ _id: response.locals.decoded.id }, (error, result) => {
+    if (error || !result) {
+      response.status(401).send(error || { message: "This route only available to Worker users. The logged in user with ID " + response.locals.decoded.id + " is not one." })
+    } else {
+      request.worker = result
+      return next()
+    }
+  })
+}
+
+
+module.exports = {
+  requestLogger,
+  unknownEndpoint,
+  errorHandler,
+  bodyBusinessExists,
+  businessInParamExists,
+  agencyExists,
+  businessContractExists,
+  needsToBeAgency,
+  needsToBeBusiness,
+  needsToBeWorker
+}</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-utils_common.html">utils/common</a></li><li><a href="module-utils_middleware.html">utils/middleware</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.6</a> on Mon Jan 25 2021 08:58:09 GMT+0200 (Eastern European Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

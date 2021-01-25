@@ -1,0 +1,68 @@
+---------Update yum
+sudo yum update
+
+---------OpenJDK and OpenJRE 8
+sudo yum install java-1.8.0-openjdk-devel
+sudo yum install java-1.8.0-openjdk
+
+---------Emacs text editor
+sudo yum install emacs
+
+Installing jenkins and docker
+https://www.jenkins.io/doc/book/installing/
+https://docs.docker.com/engine/install/centos/
+---------Install docker repo
+sudo yum install -y yum-utils
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+---------Install the latest version of Docker Engine and containerd, or go to the next step to install a specific version:
+sudo yum install docker-ce docker-ce-cli containerd.io
+If prompted to accept the GPG key, verify that the fingerprint matches 060A 61C5 1B55 8A7F 742B 77AA C52F EB6B 621E 9F35, and if so, accept it.
+
+---------Start docker
+sudo systemctl start docker
+Verify that Docker Engine is installed correctly by running the hello-world image.
+sudo docker run hello-world
+
+---------Docker-komentojen ajamista ei-sudona. Aiheuttaa turvariskin, mutta suositeltu jenkinsin install-ohjeissa.
+https://docs.docker.com/engine/install/linux-postinstall/
+Create docker group
+sudo groupadd docker
+Add your user to the docker group
+sudo usermod -aG docker $USER
+Tehty käyttäjille esa, hannu, mika, toni
+
+----------Start docker on boot
+sudo systemctl enable docker
+
+---------Create a bridge network in Docker
+docker network create jenkins
+
+---------Create the following volumes to share the Docker client TLS certificates needed to connect to the Docker daemon and persist the Jenkins data using the following docker volume create commands:
+docker volume create jenkins-docker-certs
+docker volume create jenkins-data
+
+---------In order to execute Docker commands inside Jenkins nodes, download and run the docker:dind Docker image
+docker container run --name jenkins-docker --rm --detach \
+  --privileged --network jenkins --network-alias docker \
+  --env DOCKER_TLS_CERTDIR=/certs \
+  --volume jenkins-docker-certs:/certs/client \
+  --volume jenkins-data:/var/jenkins_home \
+  --publish 2376:2376 docker:dind
+
+---------Download the jenkinsci/blueocean image and run it as a container in Docker 
+docker container run --name jenkins-blueocean --rm --detach \
+  --network jenkins --env DOCKER_HOST=tcp://docker:2376 \
+  --env DOCKER_CERT_PATH=/certs/client --env DOCKER_TLS_VERIFY=1 \
+  --volume jenkins-data:/var/jenkins_home \
+  --volume jenkins-docker-certs:/certs/client:ro \
+  --publish 8080:8080 --publish 50000:50000 jenkinsci/blueocean
+
+---------Jenkins setup wizard
+https://www.jenkins.io/doc/book/installing/#setup-wizard
+
+http://10.114.34.10:8080/ 
+
+---------Jenkins admin user
+user: inno
+passw: kestavakeikkatyo

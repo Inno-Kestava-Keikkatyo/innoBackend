@@ -6,7 +6,7 @@ pipeline {
     docker {
       image 'node:lts-alpine3.11'
       //image 'node:6-alpine'
-      args '-p 3000:3000'
+      args '-p 3001:3001'
     }
   }
   environment {
@@ -27,7 +27,12 @@ pipeline {
     stage('Test stage') {
       steps {
         echo 'Test stage'
-        sh 'npm test'
+        sh 'npm test -- --coverage'
+      }
+      post {
+        always {
+          step([$class: 'CoberturaPublisher', coberturaReportFile: 'coverage/cobertura-coverage.xml'])
+        }
       }
     }
     stage('Deploy stage') {

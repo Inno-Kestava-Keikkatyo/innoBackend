@@ -11,9 +11,17 @@ const businessContractSchema = mongoose.Schema({
     default: Date.now(),
     immutable: true
   },
+  agency: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "agency",
+  },
   business: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "business",
+  },
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "user",
   }
 })
 

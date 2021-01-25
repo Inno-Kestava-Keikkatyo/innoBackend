@@ -62,10 +62,14 @@ const businessSchema = mongoose.Schema({
       ref: "Form",
     },
   ],
-  workContract: [{
+  workContracts: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: "wContract",
-  }]
+    ref: "WorkContract",
+  }],
+  businessContracts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "BusinessContract",
+  }],
 })
 
 businessSchema.plugin(uniqueValidator)

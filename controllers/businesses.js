@@ -1,15 +1,34 @@
+/** Express router providing Business-related routes
+ * @module controllers/businesses
+ * @requires express
+ */
+
+/**
+ * Express router to mount Business-related functions on.
+ * @type {object}
+ * @const
+ * @namespace businessesRouter
+*/
 const businessesRouter = require("express").Router()
+
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
+const logger = require("../utils/logger")
+const Agency = require("../models/Agency")
 const Business = require("../models/Business")
+const BusinessContract = require("../models/BusinessContract")
 const authenticateToken = require("../utils/auhenticateToken")
-const utils = require("../utils/common")
-const { businessExists, needsToBeAgency } = require("../utils/middleware")
+const { needsToBeBusiness } = require("../utils/middleware")
 
-const domainUrl = "http://localhost:3000/"
-const businessApiPath = "api/businesses/"
-const workersPath = "workers/"
-
+/**
+ * Returns response.body: { token, name: savedBusiness.name, email: savedBusiness.email, role: "business" }
+ * request.body requirements: {name: "name", email: "email", password: "password"}
+ * Route to create a new Business account.
+ * @name POST /businesses
+ * @function
+ * @memberof module:controllers/businesses~businessesRouter
+ * @inner
+ */
 businessesRouter.post("/", async (request, response, next) => {
   try {
     const body = request.body
@@ -48,6 +67,15 @@ businessesRouter.post("/", async (request, response, next) => {
   }
 })
 
+/**
+ * Returns response.body: { The found Business object }
+ * Requires user logged in as a Business
+ * Route to get Business information
+ * @name GET /businesses/me
+ * @function
+ * @memberof module:controllers/businesses~businessesRouter
+ * @inner
+ */
 businessesRouter.get("/me", authenticateToken, (request, response, next) => {
   try {
     //Decodatun tokenin arvo haetaan middlewarelta
@@ -66,6 +94,15 @@ businessesRouter.get("/me", authenticateToken, (request, response, next) => {
   }
 })
 
+/**
+ * Returns response.body: { The updated Business object }
+ * Requires user must be logged in as Business. request.body OPTIONAL: {property: "value", ....}. Properties need to match those of Business model in database.
+ * Route to update Business information.
+ * @name PUT /businesses/
+ * @function
+ * @memberof module:controllers/businesses~businessesRouter
+ * @inner
+ */
 businessesRouter.put("/", authenticateToken, async (request, response, next) => {
   const body = request.body
   const decoded = response.locals.decoded
@@ -111,95 +148,64 @@ businessesRouter.put("/", authenticateToken, async (request, response, next) => 
   }
 })
 
-/**
- * Path for adding workers to a Business' list of workers
- * Example "http://www.domain.com/api/1/workers/"
- * where "1" is the id of the Business in question.
- * Request requirements: The logged in user must be an Agency who has a common BusinessContract with contractMade: true
- * with the businessId Business.
- * request.body.workers / request.body.worker
- * Workers are given as a json array of IDs: {"workers": ["id1","id2","id3"...]}
- * A single worker can also be given as json: {"worker":"id"}
- */
-businessesRouter.post("/:businessId/workers", authenticateToken, businessExists, needsToBeAgency, (request, response, next) => {
 
-  // Middleware businessExists() has populated request.business with the Business with businessId.
-  const businessId = request.business._id
-  const agency = request.agency
+businessesRouter.get("/", authenticateToken, async (request, response, next) => {
+  const decoded = response.locals.decoded
+  const name = request.query.name
+
   try {
-    if (!agency.businessContracts || agency.businessContracts.length === 0) {
-      response.status(400).send({ message: "The logged in Agency has no BusinessContracts." })
-    }
-
-    // Go through the contracts from this agency and check if the required :businessId can be found from any of them
-    let commonContractId = null
-    agency.businessContracts.array.forEach(contract => {
-      if (contract.business === businessId) {
-        commonContractId = contract._id
+    const agency = await Agency.findById(decoded.id)
+    if (agency && name) {
+      // Työntekijät haetaan SQL:n LIKE operaattorin tapaisesti
+      // Työpassit jätetään hausta pois
+      const users = await Business.find({ name: { $regex: name, $options: "i" } }, { licenses: 0 })
+      if (users) {
+        return response.status(200).json(users)
       }
-    })
-
-    if (!commonContractId || commonContractId === null) {
-      response.status(400).send({ message: "The logged in Agency has no BusinessContracts with Business with ID " + businessId })
     }
-
-    // Everything fine, adding workers...
-
-    // Adding a single worker
-    if (request.body.worker) {
-      const workerId = request.body.worker
-      // addToSet operation adds an item to a mongoose array, if that item is not already present.
-      if (utils.workerExists(request.body.worker, next)) {
-        Business.findOneAndUpdate({ _id: request.business._id }, { $addToSet: { users: workerId } }, (error, result) => {
-          if (error || !result) {
-            response
-              .status(500)
-              .send(error || { message: "Could not add Worker with ID" + workerId + " into Business with ID" + businessId + "." })
-          } else {
-            // Added Worker to Business, return resource URL
-            return response
-              .status(200)
-              .json({ updated: domainUrl + businessApiPath + businessId + workersPath, workersAdded: workerId })
-          }
-        })
-      } else {
-        return response
-          .status(404)
-          .json({ error: "Could not find Worker with ID " + workerId + "." })
-      }
-
-      // Adding several workers
-    } else if (request.body.workers) {
-      let workerIdsToAdd
-      let workerIdsNotOk
-
-      utils.whichWorkersExist(request.body.workers, next, (workerResult) => {
-        workerIdsToAdd = workerResult.existingWorkerIds
-        workerIdsNotOk = workerResult.nonExistingWorkerIds
-
-        if (workerIdsToAdd && workerIdsToAdd.length > 0) {
-          // $addToSet adds to mongoose array if the item does not already exist, thus eliminating duplicates.
-          Business.findOneAndUpdate({ _id: request.business._id }, { $addToSet: { users: workerIdsToAdd } }, (error, result) => {
-            if (error || !result) {
-              console.log("Could not add worker array to Business. Error: " + error)
-              return response
-                .status(400)
-                .json({ error: "Could not add all Workers to Business, so added none." })
-            }
-            // There were some ok worker ids to add
-            return response
-              .status(200)
-              .json({ updated: domainUrl + businessApiPath + businessId, workersAdded: workerIdsToAdd, workersNotAdded: workerIdsNotOk })
-          })
-        } else {
-          return response
-            .status(404)
-            .json({ error: "All of the sent Worker Ids were either erronous or could not be matched with an existing worker." })
-        }
-      } )
-    }
-
+    return response.status(400).json({ error: "Users not found" })
   } catch (exception) {
+    return next(exception)
+  }
+})
+
+/**
+ * Returns response.body: { [{businessContract1}, {businessContract2},...] }
+ * Route for getting full data of all BusinessContracts that the logged in Business has.
+ * @name GET /businesses/businesscontracts
+ * @function
+ * @memberof module:controllers/businesses~businessesRouter
+ * @inner
+ */
+businessesRouter.get("/businesscontracts", authenticateToken, needsToBeBusiness, async (request, response, next) => {
+  const contractIds = request.business.businessContracts
+  logger.info("ContractIds of this Business: " + contractIds)
+  let contracts = []
+  let temp = null
+  try {
+    if (contractIds) {
+      logger.info("Searching database for BusinessContracts: " + contractIds)
+      contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+        temp = await BusinessContract.findById(contractId).exec()
+        if (temp) {
+          contracts.push(temp)
+          temp = null
+        }
+
+        if (index === contractIds.length-1) { // If this was the last contract to find, send response
+          logger.info("BusinessContracts to Response: " + contracts)
+          return response
+            .status(200)
+            .json(contracts)
+        }
+      })
+    } else { // No contractIds in Business, respond with empty array
+      return response
+        .status(200)
+        .json(contracts)
+    }
+  } catch (exception) {
+    logger.error(exception)
     next(exception)
   }
 })

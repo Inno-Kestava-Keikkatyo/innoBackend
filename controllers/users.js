@@ -1,13 +1,34 @@
+/** Express router providing Worker-related routes
+ * @module controllers/users
+ * @requires express
+ */
+
+/**
+ * Express router to mount Worker-related functions on.
+ * @type {object}
+ * @const
+ * @namespace usersRouter
+*/
 const usersRouter = require("express").Router()
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
+const logger = require("../utils/logger")
 const authenticateToken = require("../utils/auhenticateToken")
 
 const User = require("../models/User")
+const Agency = require("../models/Agency")
+const BusinessContract = require("../models/BusinessContract")
+const { needsToBeWorker } = require("../utils/middleware")
 
 /**
+ * Returns response.body: { token, name: user.name, email: user.email, role: "worker" }
+ * request.body requirements: {name: "name", email: "email", password: "password"}
  * User registration.
  * Returns a token that is used for user log in.
+ * @name POST /users
+ * @function
+ * @memberof module:controllers/users~usersRouter
+ * @inner
  */
 usersRouter.post("/", async (request, response, next) => {
   try {
@@ -42,6 +63,14 @@ usersRouter.post("/", async (request, response, next) => {
   }
 })
 
+/**
+ * Returns response.body: { The found Worker object }
+ * Requires user logged in as a Worker
+ * @name GET /users/me
+ * @function
+ * @memberof module:controllers/users~usersRouter
+ * @inner
+ */
 usersRouter.get("/me", authenticateToken, async (request, response, next) => {
   try {
     //Decodatun tokenin arvo haetaan middlewarelta
@@ -60,6 +89,14 @@ usersRouter.get("/me", authenticateToken, async (request, response, next) => {
   }
 })
 
+/**
+ * Returns response.body: { The found Worker object }
+ * Requires User logged in as a Worker. request.body OPTIONAL: Properties as per User model.
+ * @name PUT /users
+ * @function
+ * @memberof module:controllers/users~usersRouter
+ * @inner
+ */
 usersRouter.put("/", authenticateToken, async (request, response, next) => {
   const body = request.body
   const decoded = response.locals.decoded
@@ -102,6 +139,78 @@ usersRouter.put("/", authenticateToken, async (request, response, next) => {
 
   } catch (exception) {
     return next(exception)
+  }
+})
+
+/**
+ * Returns response.body: { List of users }
+ * Requires User logged in as an Agency. request.query.name: Worker name to be searched
+ * Retrieves all workers that have a matching name pattern.
+ * @example
+ * http://localhost:3001/api/users?name=jarmo
+ * @name GET /users
+ * @function
+ * @memberof module:controllers/users~usersRouter
+ * @inner
+ */
+usersRouter.get("/", authenticateToken, async (request, response, next) => {
+  const decoded = response.locals.decoded
+  const name = request.query.name
+
+  try {
+    const agency = await Agency.findById(decoded.id)
+    if (agency && name) {
+      // Työntekijät haetaan SQL:n LIKE operaattorin tapaisesti
+      // Työpassit jätetään hausta pois
+      const users = await User.find({ name: { $regex: name, $options: "i" } }, { licenses: 0 })
+      if (users) {
+        return response.status(200).json(users)
+      }
+    }
+    return response.status(400).json({ error: "Users not found" })
+  } catch (exception) {
+    return next(exception)
+  }
+})
+
+/**
+ * Returns response.body: { [{businessContract1}, {businessContract2},...] }
+ * Requires User logged in as an Worker.
+ * Route for getting full data of all BusinessContracts that the logged in Worker has.
+ * @name GET /users/businesscontracts
+ * @function
+ * @memberof module:controllers/users~usersRouter
+ * @inner
+ */
+usersRouter.get("/businesscontracts", authenticateToken, needsToBeWorker, async (request, response, next) => {
+  const contractIds = request.worker.businessContracts
+  let contracts = []
+  let temp = null
+  try {
+    if (contractIds) {
+      logger.info("Searching database for BusinessContracts: " + contractIds)
+      contractIds.forEach(async (contractId, index, contractIds) => { // Go through every contractId and, find contract data and push it to array "contracts".
+        temp = await BusinessContract.findById(contractId).exec()
+        if (temp) {
+          contracts.push(temp)
+          temp = null
+        }
+
+        if (index === contractIds.length-1) { // If this was the last contract to find, send response
+          logger.info("BusinessContracts to Response: " + contracts)
+          return response
+            .status(200)
+            .json(contracts)
+        }
+      })
+    } else { // No contractIds in Worker, respond with empty array
+      return response
+        .status(200)
+        .json(contracts)
+    }
+  } catch (exception) {
+    logger.error(exception)
+    next(exception)
   }
 })
 

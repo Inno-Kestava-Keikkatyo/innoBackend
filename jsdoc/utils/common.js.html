@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: common.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: common.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/** Module to contain utility functions used in Express routes
+ * @module utils/common
+ * @requires express
+ */
+
+const User = require("../models/User")
+const Business = require("../models/Business")
+const Agency = require("../models/Agency")
+const logger = require("./logger")
+
+/**
+ * Checks if a worker with param id exists.
+ * Returns True, if worker exists. False, if not.
+ * @function
+ * @memberof module:utils/common
+ * @inner
+ * @param {*} id
+*/
+const workerExists = async (id) => {
+  logger.info("Checking if Worker with ID " + id + " exists.")
+  return await User.findById({ _id: id }).exec()
+}
+
+/**
+ * Checks through an array of worker ids,and returns an array of ids that exist.
+ * Returned list may contain duplicates, if the param array had them.
+ * @function
+ * @memberof module:utils/common
+ * @inner
+ * @param {Array} workerIdArray
+ */
+const whichWorkersExist = (workerIdArray, next, callback) => {
+  try {
+    let existingWorkerIds = []
+    let nonExistingWorkerIds = []
+    if (Array.isArray(workerIdArray)) {
+      for (let i = 0; i &lt; workerIdArray.length; i++) {
+        User.findById(workerIdArray[i], (error, result) => {
+          if (error || !result) {
+            nonExistingWorkerIds.push(workerIdArray[i])
+          } else {
+            existingWorkerIds.push(workerIdArray[i])
+          }
+
+          if (i === workerIdArray.length-1) {
+            callback({
+              existingWorkerIds: existingWorkerIds,
+              nonExistingWorkerIds: nonExistingWorkerIds
+            })
+          }
+        })
+      }
+    }
+  } catch (exception) {
+    next(exception)
+  }
+}
+
+/**
+ * If a WorkContract fails to save, this method will remove the id references which may have been updated to Worker, Business, Agency
+ * @function
+ * @memberof module:utils/common
+ * @inner
+ */
+const deleteTracesOfWorkContract = async (workerId, businessId, agencyId, workContractId, next) => {
+  try {
+    const options = { $pull: { workContracts: ["workContractId"] } }
+    let successful = true
+
+    await User.findByIdAndUpdate(workerId, options, (error, result) => {
+      if (error) {
+        logger.error("Could not remove WorkContract ID " + workContractId + " from Worker ID " + workerId + " because of  ERROR: " + error)
+        successful = false
+      } else if (!result) {
+        successful = false
+        logger.info("Could not remove WorkContract ID " + workContractId + " from Worker ID " + workerId + ". Could not find Worker.")
+      }
+    })
+
+    await Agency.findByIdAndUpdate(agencyId, options, (error, result) => {
+      if (error) {
+        logger.error("Could not remove WorkContract ID " + workContractId + " from Agency ID " + agencyId + " because of  ERROR: " + error)
+        successful = false
+      } else if (!result) {
+        successful = false
+        logger.info("Could not remove WorkContract ID " + workContractId + " from Agency ID " + agencyId + ". Could not find Agency.")
+      }
+    })
+
+    await Business.findByIdAndUpdate(businessId, options, (error, result) => {
+      if (error) {
+        logger.error("Could not remove WorkContract ID " + workContractId + " from Business ID " + businessId + " because of  ERROR: " + error)
+        successful = false
+      } else if (!result) {
+        successful = false
+        logger.info("Could not remove WorkContract ID " + workContractId + " from Business ID " + businessId + ". Could not find Business.")
+      }
+    })
+
+    if (!successful) {
+      return false
+    } else {
+      return true
+    }
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * A method for removing references to a BusinessContract from Worker, Business, Agency
+ * @function
+ * @memberof module:utils/common
+ * @inner
+ */
+const deleteTracesOfBusinessContract = async (businessContract, next) => {
+  try {
+    let success = true
+    const options = { $pull: { businessContracts: [businessContract._id] }, new: true }
+
+    if (businessContract.user) {
+      const user = await User.findByIdAndUpdate(businessContract.user, options).exec()
+      logger("Deleting traces of BusinessContract ID " + businessContract._id + ". User: " + user)
+      if (!user) {
+        success = false
+      }
+    }
+
+    if (businessContract.business) {
+      const business = await Business.findByIdAndUpdate(businessContract.business, options).exec()
+      logger.info("Deleting traces of BusinessContract ID " + businessContract._id + ". Business: " + business)
+      if (!business) {
+        logger.info("Turning success to false.")
+        success = false
+      }
+    }
+
+    const agency = await Agency.findByIdAndUpdate(businessContract.agency, options).exec()
+    logger.info("Deleting traces of BusinessContract ID " + businessContract._id + ". Agency: " + agency)
+    if (!agency) {
+      logger.info("Turning success to false.")
+      success = false
+    }
+
+    if (success &amp;&amp; agency) {
+      return true
+    } else {
+      return false
+    }
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * Checks if a Business with businessId exists.
+ * @function
+ * @memberof module:utils/common
+ * @inner
+*/
+const businessExists = async (businessId) => {
+  const business = await Business.findById({ _id: businessId })
+  if (!business) {
+    logger.error("Error in businessexists. ")
+    return false
+  } else {
+    logger.info("BusinessExists: " + business)
+    return true
+  }
+}
+
+
+module.exports = {
+  workerExists, whichWorkersExist, deleteTracesOfWorkContract, businessExists, deleteTracesOfBusinessContract
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-utils_common.html">utils/common</a></li><li><a href="module-utils_middleware.html">utils/middleware</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.6</a> on Mon Jan 25 2021 08:58:09 GMT+0200 (Eastern European Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
