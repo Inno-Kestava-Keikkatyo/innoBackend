@@ -1,4 +1,32 @@
-const businesscontractsRouter = require("express").Router()
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: businesscontracts.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: businesscontracts.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const businesscontractsRouter = require("express").Router()
 const authenticateToken = require("../utils/auhenticateToken")
 const BusinessContract = require("../models/BusinessContract")
 const { businessContractExists, needsToBeAgency } = require("../utils/middleware")
@@ -39,7 +67,7 @@ businesscontractsRouter.get("/:businessContractId", authenticateToken, businessC
 
     if (role.toString() === "agency") {
       // Check if the Agency is part of this contract
-      if (contract.agency && (contract.agency.toString() === loggedId)) {
+      if (contract.agency &amp;&amp; (contract.agency.toString() === loggedId)) {
         return response
           .status(200)
           .json({ businessContract: contract })
@@ -50,7 +78,7 @@ businesscontractsRouter.get("/:businessContractId", authenticateToken, businessC
       }
     } else if (role.toString() === "business") {
       // Check if the Business is part of this contract
-      if (contract.business && (contract.business.toString() === loggedId)) {
+      if (contract.business &amp;&amp; (contract.business.toString() === loggedId)) {
         return response
           .status(200)
           .json({ businessContract: contract })
@@ -62,7 +90,7 @@ businesscontractsRouter.get("/:businessContractId", authenticateToken, businessC
 
     } else if (role.toString() === "worker") {
       // Check if the Worker is part of this contract
-      if (contract.user && (contract.user.toString() === loggedId)) {
+      if (contract.user &amp;&amp; (contract.user.toString() === loggedId)) {
         return response
           .status(200)
           .json({ businessContract: contract })
@@ -96,7 +124,7 @@ businesscontractsRouter.get("/:businessContractId", authenticateToken, businessC
  */
 businesscontractsRouter.post("/", authenticateToken, needsToBeAgency, async (request, response, next) => {
   try {
-    if (request.body.businessId && request.body.workerId) {
+    if (request.body.businessId &amp;&amp; request.body.workerId) {
       response
         .status(400)
         .json({ message: "A BusinessContract can only have EITHER a businessId or a workerId, not both." })
@@ -140,7 +168,7 @@ businesscontractsRouter.post("/", authenticateToken, needsToBeAgency, async (req
         .json({ message: "No workerId or businessId in request body." })
     }
 
-    if (contractToCreate !== null && request.agency.businessContracts) {
+    if (contractToCreate !== null &amp;&amp; request.agency.businessContracts) {
       logger.info("Agency has previous BusinessContracts. Agency: " + request.agency)
 
       // Check if businessContract between this Agency and the Business/Worker already exists
@@ -163,7 +191,7 @@ businesscontractsRouter.post("/", authenticateToken, needsToBeAgency, async (req
       // If there was no BusinessContract between this Agency and the Business, create a new one
       createBusinessContract(contractToCreate, response, createBusinessContractCallBack)
 
-    } else if (contractToCreate !== null && request.agency.businessContracts.length === 0) { // Agency had no BusinessContracts yet
+    } else if (contractToCreate !== null &amp;&amp; request.agency.businessContracts.length === 0) { // Agency had no BusinessContracts yet
       logger.info("Agency has NO previous BusinessContracts. Agency: " + request.agency)
       createBusinessContract(contractToCreate, response, createBusinessContractCallBack)
     }
@@ -328,7 +356,7 @@ businesscontractsRouter.delete("/:businessContractId", authenticateToken, busine
  */
 const createBusinessContract = (contractToCreate, response, callback) => {
 
-  if (contractToCreate.business && contractToCreate.user) {
+  if (contractToCreate.business &amp;&amp; contractToCreate.user) {
     callback(new Error("Both businessId and workerId given to createBusinessContract(), can take only either one."), null, response)
   }
 
@@ -382,4 +410,26 @@ const addBusinessContractToParticipants = async (contract, callback) => {
   }
 }
 
-module.exports = businesscontractsRouter
+module.exports = businesscontractsRouter</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-controllers_agencies.html">controllers/agencies</a></li><li><a href="module-controllers_businesses.html">controllers/businesses</a></li><li><a href="module-controllers_users.html">controllers/users</a></li><li><a href="module-controllers_workcontracts.html">controllers/workcontracts</a></li></ul><h3>Namespaces</h3><ul><li><a href="module-controllers_agencies-agenciesRouter.html">agenciesRouter</a></li><li><a href="module-controllers_businesses-businessesRouter.html">businessesRouter</a></li><li><a href="module-controllers_users-usersRouter.html">usersRouter</a></li><li><a href="module-controllers_workcontracts-workcontractsRouter.html">workcontractsRouter</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.6</a> on Mon Jan 25 2021 08:56:49 GMT+0200 (Eastern European Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
